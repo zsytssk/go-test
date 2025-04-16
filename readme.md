@@ -1,1 +1,1 @@
-https://go.dev/doc/tutorial/getting-started
+https://go.dev/tour/welcome/1

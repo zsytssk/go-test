@@ -1,4 +1,4 @@
-module example/go-test
+module go-test
 
 go 1.24.1
 
