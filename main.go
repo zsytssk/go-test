@@ -3,25 +3,34 @@ package main
 import (
 	"fmt"
 	"sort"
+
+	fuzzy "github.com/paul-mannino/go-fuzzywuzzy"
 )
 
-// Person 定义一个结构体
-type Person struct {
-	Name string
-	Age  int
+type Candidate struct {
+	Text   string
+	Weight float64
+	Score  int
 }
 
 func main() {
-	people := []Person{
-		{"Alice", 25},
-		{"Bob", 20},
-		{"Charlie", 30},
+	input := "fzr"
+	candidates := []Candidate{
+		{"fzf", 1.5, 0},
+		{"fuzzy", 1.0, 0},
+		{"foo", 0.5, 0},
 	}
 
-	// 按年龄升序排序
-	sort.Slice(people, func(i, j int) bool {
-		return people[i].Age > people[j].Age
+	for i := range candidates {
+		candidates[i].Score = fuzzy.Ratio(input, candidates[i].Text)
+		candidates[i].Score = int(float64(candidates[i].Score) * candidates[i].Weight)
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
 	})
 
-	fmt.Println(people)
+	for _, c := range candidates {
+		fmt.Printf("%s (score: %d)\n", c.Text, c.Score)
+	}
 }
