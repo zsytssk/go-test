@@ -2,75 +2,96 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"log"
-	"os"
-	"os/exec"
+	"reflect"
 )
 
-type Candidate struct {
-	Text   string
-	Weight float64
-	Score  int
+type Item struct {
+	ID       int
+	Name     string
+	Priority int
 }
 
-var items = []map[string]interface{}{
-	{
-		"ID":       1,
-		"Priority": 1,
-		"Name":     "测试 1",
-	},
-	{
-		"ID":       2,
-		"Priority": 2,
-		"Name":     "测试 2",
-	},
-	{
-		"ID":       3,
-		"Priority": 3,
-		"Name":     "测试 3",
-	},
+type DirItem struct {
+	Item
+	Dir string
+}
+
+func (DirItem) TableName() string {
+	return "device_shutdown_operation"
 }
 
 func main() {
-	reader, writer := io.Pipe()
+	item := DirItem{Dir: "123", Item: Item{ID: 1, Name: "123", Priority: 0}}
 
-	fzf := exec.Command("fzf", "--ansi")
-	fzf.Stdin = reader
-	fzf.Stdout = os.Stdout
-	fzf.Stderr = os.Stderr
-
-	go func() {
-		defer writer.Close()
-
-		// // 写入历史记录
-		for _, item := range items {
-			fmt.Fprintf(writer, "%s [%d:%d]\n", item["Name"], item["ID"], item["Priority"])
-		}
-
-		// 实时执行 find 命令并写入
-		findCmd := exec.Command("bash", "-c", "find /home/zsy")
-		findOut, _ := findCmd.StdoutPipe()
-		findCmd.Stderr = os.Stderr
-		_ = findCmd.Start()
-
-		io.Copy(writer, findOut)
-		findCmd.Wait()
-	}()
-
-	if err := fzf.Run(); err != nil {
-		if IsCanceled(err) {
-			log.Println("选择已取消")
-			return
-		}
-		log.Fatal(err)
+	m := StructToMap(item)
+	for item, value := range m {
+		fmt.Printf("%s: %v (%T)\n", item, value, value)
 	}
-
+	fmt.Println("----------------")
+	i := MapToStruct(m, reflect.TypeOf(DirItem{}))
+	fmt.Println(`test:>key`, reflect.TypeOf(i))
+	fmt.Println(*i.(*DirItem))
 }
 
-func IsCanceled(err error) bool {
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		return exitErr.ExitCode() == 130
+func StructToMap(obj interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	v := reflect.ValueOf(obj)
+
+	// 如果是指针，先取指针指向的值
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
-	return false
+
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldVal := v.Field(i)
+		if !fieldVal.CanInterface() {
+			continue
+		}
+		value := fieldVal.Interface()
+		if IsZero(value) {
+			continue
+		}
+		if field.Type.Kind() == reflect.Struct {
+
+			result[field.Name] = StructToMap(value)
+			continue
+		}
+		result[field.Name] = value
+	}
+
+	return result
+}
+func MapToStruct(obj map[string]interface{}, t reflect.Type) interface{} {
+	// 创建结构体实例
+	v := reflect.New(t)
+
+	for key, value := range obj {
+		// 获取结构体字段
+		field := v.Elem().FieldByName(key)
+		if !field.IsValid() || !field.CanSet() {
+			continue
+		}
+		if field.Type().Kind() == reflect.Struct {
+			// 递归处理嵌套结构体
+			nestedMap, ok := value.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			nestedStruct := MapToStruct(nestedMap, field.Type())
+
+			field.Set(reflect.ValueOf(nestedStruct).Elem())
+			continue
+		}
+		fmt.Println(`test:>key`, value)
+		// 设置字段值
+		field.Set(reflect.ValueOf(value))
+	}
+	return v.Interface()
+}
+
+func IsZero(v interface{}) bool {
+	val := reflect.ValueOf(v)
+	return val.IsZero() // Go 1.13+
 }
