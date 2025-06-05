@@ -28,9 +28,14 @@ func main() {
 		fmt.Printf("%s: %v (%T)\n", item, value, value)
 	}
 	fmt.Println("----------------")
-	i := MapToStruct(m, reflect.TypeOf(DirItem{}))
-	fmt.Println(`test:>key`, reflect.TypeOf(i))
-	fmt.Println(*i.(*DirItem))
+	i := MapToStruct(m, reflect.TypeOf(DirItem{})).(DirItem)
+	fmt.Println(`test:>key`, i)
+	testFn(reflect.TypeOf(i))
+}
+
+func testFn(t reflect.Type) {
+	v := reflect.New(t)
+	fmt.Println(`test:>key`, v.Kind())
 }
 
 func StructToMap(obj interface{}) map[string]interface{} {
@@ -43,8 +48,8 @@ func StructToMap(obj interface{}) map[string]interface{} {
 	}
 
 	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
+	for i := 0; i < v.NumField(); i++ {
+		fieldType := t.Field(i)
 		fieldVal := v.Field(i)
 		if !fieldVal.CanInterface() {
 			continue
@@ -53,23 +58,23 @@ func StructToMap(obj interface{}) map[string]interface{} {
 		if IsZero(value) {
 			continue
 		}
-		if field.Type.Kind() == reflect.Struct {
-
-			result[field.Name] = StructToMap(value)
+		if fieldType.Type.Kind() == reflect.Struct {
+			result[fieldType.Name] = StructToMap(value)
 			continue
 		}
-		result[field.Name] = value
+		result[fieldType.Name] = value
 	}
 
 	return result
 }
+
 func MapToStruct(obj map[string]interface{}, t reflect.Type) interface{} {
 	// 创建结构体实例
-	v := reflect.New(t)
+	v := reflect.New(t).Elem()
 
 	for key, value := range obj {
 		// 获取结构体字段
-		field := v.Elem().FieldByName(key)
+		field := v.FieldByName(key)
 		if !field.IsValid() || !field.CanSet() {
 			continue
 		}
@@ -81,13 +86,13 @@ func MapToStruct(obj map[string]interface{}, t reflect.Type) interface{} {
 			}
 			nestedStruct := MapToStruct(nestedMap, field.Type())
 
-			field.Set(reflect.ValueOf(nestedStruct).Elem())
+			field.Set(reflect.ValueOf(nestedStruct))
 			continue
 		}
-		fmt.Println(`test:>key`, value)
 		// 设置字段值
 		field.Set(reflect.ValueOf(value))
 	}
+
 	return v.Interface()
 }
 
