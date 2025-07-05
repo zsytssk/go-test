@@ -179,7 +179,7 @@ func StructToSQLGetList[T TableStruct](db *sql.DB, obj T) (list []T, err error) 
 	for _, field := range fields_list {
 		columns = append(columns, fmt.Sprintf("%s", field["name"]))
 	}
-	sqlStr := fmt.Sprintf("SELECT %s FROM %s ORDER BY priority desc",
+	sqlStr := fmt.Sprintf("SELECT %s FROM %s",
 		strings.Join(columns, ", "),
 		strings.ToLower(obj.TableName()),
 	)

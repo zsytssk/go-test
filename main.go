@@ -35,27 +35,46 @@ func main() {
 		panic(err)
 	}
 
-	obj := DirItem{Dir: "123", Item: Item{ID: 1, Name: "123", Priority: 123}}
-	err = dbt.StructToSQLInsert(db, obj)
+	obj1 := DirItem{Dir: "123", Item: Item{ID: 1, Name: "123", Priority: 123}}
+	obj2 := DirItem{Dir: "123", Item: Item{ID: 2, Name: "123", Priority: 123}}
+	err = dbt.StructToSQLInsert(db, obj1)
 	if err != nil {
 		panic(err)
 	}
-	obj2 := DirItem{Dir: "1234", Item: Item{ID: 1, Name: "1234", Priority: 0}}
-	err = dbt.StructToSQLUpdate(db, obj2, false)
+	err = dbt.StructToSQLInsert(db, obj2)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("create -table success")
-	list, err := dbt.StructToSQLGetList(db, DirItem{})
+	db1 := dbt.NewModel(db, &DirItem{})
+
+	var count int64
+	err = db1.Count(&count).Error
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(`test:>count`, count)
+	var item DirItem
+	err = db1.First(&item).Error
 	if err != nil {
 		panic(err)
 	}
 
-	jsonBytes, err := json.MarshalIndent(list, "", "  ")
+	jsonBytes, err := json.MarshalIndent(item, "", "  ")
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(jsonBytes))
+	fmt.Println(`test:>items`, string(jsonBytes))
+	var list []DirItem
+	err = db1.Find(&list).Error
+	if err != nil {
+		panic(err)
+	}
+
+	jsonBytes1, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(`test:>items`, string(jsonBytes1))
 	// data, err := json.Marshal(obj)
 	// if err != nil {
 	// 	panic(err)

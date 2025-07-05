@@ -1,34 +1,178 @@
 package dbt
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"reflect"
+)
+
+type Condition struct {
+	ConditionType string
+	Query         string
+	Args          []interface{}
+}
+type TableInfo struct {
+	FieldsList []map[string]interface{}
+	TableName  string
+}
 
 type Model struct {
-	DB    *sql.DB
-	Obj   *TableStruct
-	Error error
+	DB         *sql.DB
+	Obj        TableStruct
+	Error      error
+	TableInfo  TableInfo
+	conditions []Condition
+}
+
+func NewModel(db *sql.DB, obj TableStruct) *Model {
+	fields_list := collectFields(obj)
+
+	return &Model{
+		DB:        db,
+		Obj:       obj,
+		TableInfo: TableInfo{FieldsList: fields_list, TableName: obj.TableName()},
+	}
+}
+
+func (m *Model) BuildConditions(conditions []Condition) string {
+	var where_str string
+	var order_str string
+	var limit_str string
+	var offset_str string
+	for _, condition := range conditions {
+		switch condition.ConditionType {
+		case "where":
+			if where_str != "" {
+				continue
+			}
+			where_str = condition.Query
+		case "order":
+			if order_str != "" {
+				continue
+			}
+			order_str = condition.Query
+		case "limit":
+			if limit_str != "" {
+				continue
+			}
+			limit_str = condition.Query
+		case "offset":
+			if offset_str != "" {
+				continue
+			}
+			offset_str = condition.Query
+		}
+	}
+	return fmt.Sprintf("%s %s %s %s %s",
+		m.TableInfo.TableName,
+		where_str,
+		order_str,
+		limit_str,
+		offset_str,
+	)
 }
 
 func (m *Model) Where(query string) *Model {
+	m.conditions = append(m.conditions, Condition{
+		ConditionType: "where",
+		Query:         query,
+	})
 	return m
 }
-func (m *Model) Count(count *int64) *Model {
-	return m
-}
+
 func (m *Model) Limit(limit *int64) *Model {
+	m.conditions = append(m.conditions, Condition{
+		ConditionType: "limit",
+		Query:         fmt.Sprintf(" LIMIT %d", *limit),
+	})
 	return m
 }
 func (m *Model) Offset(offset *int64) *Model {
-	return m
-}
-func (m *Model) Find(dest interface{}) *Model {
+	m.conditions = append(m.conditions, Condition{
+		ConditionType: "offset",
+		Query:         fmt.Sprintf(" OFFSET %d", *offset),
+	})
 	return m
 }
 func (m *Model) Order(order string) *Model {
+	m.conditions = append(m.conditions, Condition{
+		ConditionType: "order",
+		Query:         order,
+	})
 	return m
 }
-func (m *Model) First(first interface{}) *Model {
+
+func (m *Model) First(first *TableStruct) *Model {
+	conditions := append([]Condition{Condition{
+		ConditionType: "order",
+		Query:         "LIMIT 1",
+	}}, m.conditions...)
+
+	sql := fmt.Sprintf("SELECT * FROM %s", m.BuildConditions(conditions))
+	elemPtr := reflect.ValueOf(first) // *T
+	elemVal := elemPtr.Elem()         // T
+	var scanArgs []interface{}
+
+	for _, field := range m.TableInfo.FieldsList {
+		fieldName := field["oriName"].(string)
+
+		// 获取结构体中对应的字段
+		structField := elemVal.FieldByName(fieldName) // 需要转换
+
+		// 跳过非法或未导出字段
+		if !structField.IsValid() || !structField.CanAddr() {
+			continue
+		}
+
+		// 添加字段地址作为 Scan 参数
+		scanArgs = append(scanArgs, structField.Addr().Interface())
+	}
+	err := m.DB.QueryRow(sql).Scan(scanArgs...)
+	m.Error = err
 	return m
 }
-func (m *Model) Last(first interface{}) *Model {
+func (m *Model) Count(count *int64) *Model {
+	sql := fmt.Sprintf("SELECT COUNT(*) FROM %s", m.BuildConditions(m.conditions))
+	err := m.DB.QueryRow(
+		sql,
+	).Scan(count)
+	fmt.Println(sql)
+	m.Error = err
+	return m
+}
+func (m *Model) Find(dest *[]TableStruct) *Model {
+	sql := fmt.Sprintf("SELECT COUNT(*) FROM %s", m.BuildConditions(m.conditions))
+	rows, err := m.DB.Query(sql)
+	if err != nil {
+		m.Error = err
+		return m
+	}
+	defer rows.Close()
+	for rows.Next() {
+		elemPtr := reflect.New(reflect.TypeOf(m.Obj)) // *T
+		elemVal := elemPtr.Elem()                     // T
+		var scanArgs []interface{}
+
+		for _, field := range m.TableInfo.FieldsList {
+			fieldName := field["oriName"].(string)
+
+			// 获取结构体中对应的字段
+			structField := elemVal.FieldByName(fieldName) // 需要转换
+
+			// 跳过非法或未导出字段
+			if !structField.IsValid() || !structField.CanAddr() {
+				continue
+			}
+
+			// 添加字段地址作为 Scan 参数
+			scanArgs = append(scanArgs, structField.Addr().Interface())
+		}
+		err := rows.Scan(scanArgs...)
+		if err != nil {
+			log.Fatal(err)
+		}
+		dest = append(dest, elemVal.Interface())
+	}
 	return m
 }

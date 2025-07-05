@@ -15,6 +15,8 @@ https://go.dev/doc/tutorial/
   - insert item
   - update item
 
+- @ques 如何组合 conditions
+
 ```go
 limit := info.PageSize
 	offset := info.PageSize * (info.Page - 1)
