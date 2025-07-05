@@ -103,7 +103,7 @@ func (m *Model) Order(order string) *Model {
 	return m
 }
 
-func (m *Model) First(first *TableStruct) *Model {
+func (m *Model) First(first interface{}) *Model {
 	conditions := append([]Condition{Condition{
 		ConditionType: "order",
 		Query:         "LIMIT 1",
@@ -141,8 +141,8 @@ func (m *Model) Count(count *int64) *Model {
 	m.Error = err
 	return m
 }
-func (m *Model) Find(dest *[]TableStruct) *Model {
-	sql := fmt.Sprintf("SELECT COUNT(*) FROM %s", m.BuildConditions(m.conditions))
+func (m *Model) Find(dest interface{}) *Model {
+	sql := fmt.Sprintf("SELECT * FROM %s", m.BuildConditions(m.conditions))
 	rows, err := m.DB.Query(sql)
 	if err != nil {
 		m.Error = err
@@ -172,7 +172,7 @@ func (m *Model) Find(dest *[]TableStruct) *Model {
 		if err != nil {
 			log.Fatal(err)
 		}
-		dest = append(dest, elemVal.Interface())
+		dest = append(dest.([]interface{}), elemVal.Interface())
 	}
 	return m
 }
