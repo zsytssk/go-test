@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"go-test/utils"
+	"log"
 	"reflect"
 	"strings"
+	"time"
 )
 
 type TableInterface interface {
@@ -25,51 +27,269 @@ func InitDB(dbPath string) (db *sql.DB, err error) {
 	return
 }
 
-func UpdateOrInsert(db *sql.DB, item TableInterface) {
-	tableName := item.TableName()
-	if !CheckTableExist(db, tableName) {
-
-	}
+type TableStruct interface {
+	TableName() string
 }
 
-func CreateTable(db *sql.DB, item TableInterface) (sus bool, err error) {
-
-	var tableStmt strings.Builder
-	tableName := item.TableName()
-	t := reflect.TypeOf(item)
-	tableStmt.WriteString(fmt.Sprintf("CREATE TABLE %s\n", tableName))
-	for i := 0; i < t.NumField(); i++ {
-		fieldType := t.Field(i)
-		fieldName := fieldType.Name
-		keyName := utils.CamelToSnake(fieldName)
-		if keyName == "id" {
-			tableStmt.WriteString("id INTEGER PRIMARY KEY,\n")
-		} else {
-			typeStr := mapTypeToDbType(fieldType.Type)
-			if i == t.NumField()-1 {
-				tableStmt.WriteString(fmt.Sprintf("%s %s\n);", keyName, typeStr))
-			} else {
-				tableStmt.WriteString(fmt.Sprintf("%s %s,\n", keyName, typeStr))
-			}
+func GoTypeToSQLType(goType reflect.Type) string {
+	switch goType.Kind() {
+	case reflect.Int, reflect.Int32:
+		return "INT"
+	case reflect.Int64:
+		return "BIGINT"
+	case reflect.Uint, reflect.Uint64:
+		return "BIGINT UNSIGNED"
+	case reflect.Float32:
+		return "FLOAT"
+	case reflect.Float64:
+		return "DOUBLE"
+	case reflect.Bool:
+		return "TINYINT(1)"
+	case reflect.String:
+		return "VARCHAR(255)"
+	case reflect.Slice:
+		if goType.Elem().Kind() == reflect.Uint8 {
+			return "BLOB"
+		}
+	case reflect.Struct:
+		if goType.PkgPath() == "time" && goType.Name() == "Time" {
+			return "DATETIME"
 		}
 	}
-	fmt.Println(tableStmt.String())
-	_, err = db.Exec(tableStmt.String())
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+	return "TEXT"
 }
 
-func mapTypeToDbType(t reflect.Type) string {
-	switch t.Kind() {
-	case reflect.Int:
-		return "INTEGER"
-	case reflect.String:
-		return "TEXT"
-	default:
+func formatSQLValue(val interface{}) string {
+	switch v := val.(type) {
+	case string:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''")) // 防止 SQL 注入
+	case time.Time:
+		return fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05"))
+	case nil:
 		return "NULL"
+	default:
+		return fmt.Sprintf("%v", v) // int, float, bool 等直接返回
 	}
+}
+
+func StructToSQLCreateTable(db *sql.DB, obj TableStruct) (err error) {
+	if CheckTableExist(db, obj.TableName()) {
+		return
+	}
+	fields_list := collectFields(obj)
+	var columns []string
+	for _, field := range fields_list {
+		db_type := field["dbType"].(string)
+		if db_type == "primaryKey" {
+			columns = append(columns, fmt.Sprintf("  %s %s PRIMARY KEY", field["name"], field["sqlType"]))
+			continue
+		}
+		columns = append(columns, fmt.Sprintf("  %s %s", field["name"], field["sqlType"]))
+	}
+
+	sqlStr := fmt.Sprintf("CREATE TABLE %s (\n%s\n);",
+		strings.ToLower(obj.TableName()),
+		strings.Join(columns, ",\n"),
+	)
+	fmt.Println(sqlStr)
+	_, err = db.Exec(sqlStr)
+	if err != nil {
+		return
+	}
+	return
+}
+func StructToSQLInsert(db *sql.DB, obj TableStruct) (err error) {
+	exists, err := CheckItemExist(db, obj)
+	if exists || err != nil {
+		return
+	}
+	fields_list := collectFields(obj)
+	var columns []string
+	var placeholders []string
+	var values []interface{}
+	for _, field := range fields_list {
+		columns = append(columns, field["name"].(string))
+		placeholders = append(placeholders, "?")
+		values = append(values, formatSQLValue(field["value"]))
+	}
+	sqlStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
+		strings.ToLower(obj.TableName()),
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "),
+	)
+
+	_, err = db.Exec(sqlStr, values...)
+	if err != nil {
+		return
+	}
+	return
+}
+func StructToSQLUpdate(db *sql.DB, obj TableStruct, ignore_zero bool) (err error) {
+	fields_list := collectFields(obj)
+	var columns []string
+	var where_str string
+	for _, field := range fields_list {
+		db_type := field["dbType"].(string)
+		if db_type == "primaryKey" {
+			where_str = fmt.Sprintf("  %s = %v", field["name"], formatSQLValue(field["value"]))
+			continue
+		}
+		if ignore_zero && utils.IsZero(field["value"]) {
+			continue
+		}
+		columns = append(columns, fmt.Sprintf("  %s = %v", field["name"], formatSQLValue(field["value"])))
+	}
+	sqlStr := fmt.Sprintf("UPDATE %s\nSET %s \n WHERE %s;",
+		strings.ToLower(obj.TableName()),
+		strings.Join(columns, ", "),
+		where_str,
+	)
+	_, err = db.Exec(sqlStr)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func StructToSQLDelete(db *sql.DB, obj TableStruct) (err error) {
+	// DELETE FROM users WHERE id = 3;
+	fields_list := collectFields(obj)
+	var where_str string
+	for _, field := range fields_list {
+		db_type := field["dbType"].(string)
+		if db_type == "primaryKey" {
+			where_str = fmt.Sprintf("  %s = %v", field["name"], formatSQLValue(field["value"]))
+			break
+		}
+	}
+	sqlStr := fmt.Sprintf("DELETE FROM %s WHERE %s;",
+		strings.ToLower(obj.TableName()),
+		where_str,
+	)
+	_, err = db.Exec(sqlStr)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func StructToSQLGetList[T TableStruct](db *sql.DB, obj T) (list []T, err error) {
+	fields_list := collectFields(obj)
+	var columns []string
+	for _, field := range fields_list {
+		columns = append(columns, fmt.Sprintf("%s", field["name"]))
+	}
+	sqlStr := fmt.Sprintf("SELECT %s FROM %s ORDER BY priority desc",
+		strings.Join(columns, ", "),
+		strings.ToLower(obj.TableName()),
+	)
+	rows, err := db.Query(sqlStr)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		elemPtr := reflect.New(reflect.TypeOf(obj)) // *T
+		elemVal := elemPtr.Elem()                   // T
+		var scanArgs []interface{}
+
+		for _, field := range fields_list {
+			fieldName := field["oriName"].(string)
+
+			// 获取结构体中对应的字段
+			structField := elemVal.FieldByName(fieldName) // 需要转换
+
+			// 跳过非法或未导出字段
+			if !structField.IsValid() || !structField.CanAddr() {
+				continue
+			}
+
+			// 添加字段地址作为 Scan 参数
+			scanArgs = append(scanArgs, structField.Addr().Interface())
+		}
+		err := rows.Scan(scanArgs...)
+		if err != nil {
+			log.Fatal(err)
+		}
+		list = append(list, elemVal.Interface().(T))
+	}
+	return
+}
+
+func CheckItemExist(db *sql.DB, obj TableStruct) (exists bool, err error) {
+	fields_list := collectFields(obj)
+	var where_str string
+	for _, field := range fields_list {
+		db_type := field["dbType"].(string)
+		if db_type == "primaryKey" {
+			where_str = fmt.Sprintf("  %s = %v", field["name"], formatSQLValue(field["value"]))
+			break
+		}
+	}
+
+	sqlStr := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE %s);",
+		strings.ToLower(obj.TableName()),
+		where_str,
+	)
+
+	err = db.QueryRow(sqlStr).Scan(&exists)
+	return
+}
+
+func StructToSQLDeleteTable(db *sql.DB, obj TableStruct) (err error) {
+	// DROP TABLE IF EXISTS table_name;
+	sqlStr := fmt.Sprintf("DROP TABLE IF EXISTS %s;",
+		strings.ToLower(obj.TableName()),
+	)
+	_, err = db.Exec(sqlStr)
+	if err != nil {
+		return
+	}
+	return
+}
+func collectFields(obj interface{}) (connects []map[string]interface{}) {
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	t := v.Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		fieldType := t.Field(i)
+		fieldVal := v.Field(i)
+
+		// 跳过未导出字段
+		if !fieldType.IsExported() || !fieldVal.CanInterface() {
+			continue
+		}
+		value := fieldVal.Interface()
+		// 匿名字段 && 是 struct，递归处理
+		if fieldType.Anonymous && fieldType.Type.Kind() == reflect.Struct {
+			sub_list := collectFields(value)
+			connects = append(connects, sub_list...)
+			continue
+		}
+
+		// 字段名使用 json tag，否则用字段名
+		name := fieldType.Tag.Get("json")
+		if name == "" || name == "-" {
+			name = utils.CamelToSnake(fieldType.Name)
+		}
+		dbType := fieldType.Tag.Get("db")
+
+		sqlType := GoTypeToSQLType(fieldType.Type)
+		connects = append(connects, map[string]interface{}{
+			"dbType":  dbType,
+			"name":    name,
+			"oriName": fieldType.Name,
+			"sqlType": sqlType,
+			"value":   value,
+		})
+
+	}
+
+	return
 }
 
 func CheckTableExist(db *sql.DB, tableName string) (exist bool) {
