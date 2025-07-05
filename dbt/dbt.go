@@ -17,6 +17,7 @@ func InitDB(dbPath string) (db *sql.DB, err error) {
 	if err != nil {
 		return
 	}
+	fmt.Println(filePath)
 	db, err = sql.Open("sqlite3", filePath)
 	if err != nil {
 		return
@@ -26,16 +27,9 @@ func InitDB(dbPath string) (db *sql.DB, err error) {
 
 func UpdateOrInsert(db *sql.DB, item TableInterface) {
 	tableName := item.TableName()
-	if !checkTableExist(db, tableName) {
+	if !CheckTableExist(db, tableName) {
 
 	}
-}
-
-func checkTableExist(db *sql.DB, tableName string) (exist bool) {
-	var exists bool
-	query := "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)"
-	err := db.QueryRow(query, tableName).Scan(&exists)
-	return err == nil && exists
 }
 
 func CreateTable(db *sql.DB, item TableInterface) (sus bool, err error) {
@@ -76,4 +70,11 @@ func mapTypeToDbType(t reflect.Type) string {
 	default:
 		return "NULL"
 	}
+}
+
+func CheckTableExist(db *sql.DB, tableName string) (exist bool) {
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)"
+	err := db.QueryRow(query, tableName).Scan(&exists)
+	return err == nil && exists
 }
