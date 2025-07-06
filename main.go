@@ -30,22 +30,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = dbt.StructToSQLCreateTable(db, DirItem{})
-	if err != nil {
-		panic(err)
-	}
+	db1 := dbt.NewModel(db, &DirItem{})
 
 	obj1 := DirItem{Dir: "123", Item: Item{ID: 1, Name: "123", Priority: 123}}
+	err = db1.Save(obj1).Error
+	if err != nil {
+		panic(err)
+	}
 	obj2 := DirItem{Dir: "123", Item: Item{ID: 2, Name: "123", Priority: 123}}
-	err = dbt.StructToSQLInsert(db, obj1)
+	err = db1.Save(obj2).Error
 	if err != nil {
 		panic(err)
 	}
-	err = dbt.StructToSQLInsert(db, obj2)
-	if err != nil {
-		panic(err)
-	}
-	db1 := dbt.NewModel(db, &DirItem{})
 
 	var count int64
 	err = db1.Count(&count).Error
@@ -70,6 +66,7 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println(`test:>items`, len(list[0].Name))
 	jsonBytes1, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		panic(err)

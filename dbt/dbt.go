@@ -62,9 +62,12 @@ func GoTypeToSQLType(goType reflect.Type) string {
 func formatSQLValue(val interface{}) string {
 	switch v := val.(type) {
 	case string:
-		return fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''")) // 防止 SQL 注入
+		if v == "" {
+			return "" // 视为空值
+		}
+		return strings.ReplaceAll(v, "'", "''") // 防止 SQL 注入
 	case time.Time:
-		return fmt.Sprintf("'%s'", v.Format("2006-01-02 15:04:05"))
+		return v.Format("2006-01-02 15:04:05")
 	case nil:
 		return "NULL"
 	default:

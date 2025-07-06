@@ -103,8 +103,37 @@ func (m *Model) Order(order string) *Model {
 	return m
 }
 
+func (m *Model) Save(value interface{}) *Model {
+	if !CheckTableExist(m.DB, m.Obj.TableName()) {
+		err := StructToSQLCreateTable(m.DB, m.Obj)
+		if err != nil {
+			m.Error = err
+			return m
+		}
+	}
+	exists, err := CheckItemExist(m.DB, value.(TableStruct))
+	if err != nil {
+		m.Error = err
+		return m
+	}
+	if !exists {
+		err = StructToSQLInsert(m.DB, value.(TableStruct))
+		m.Error = err
+		return m
+	}
+	err = StructToSQLUpdate(m.DB, value.(TableStruct), false)
+	m.Error = err
+	return m
+}
+
+func (m *Model) Update(value interface{}) *Model {
+	err := StructToSQLUpdate(m.DB, value.(TableStruct), true)
+	m.Error = err
+	return m
+}
+
 func (m *Model) First(first interface{}) *Model {
-	conditions := append([]Condition{Condition{
+	conditions := append([]Condition{{
 		ConditionType: "order",
 		Query:         "LIMIT 1",
 	}}, m.conditions...)
@@ -137,11 +166,15 @@ func (m *Model) Count(count *int64) *Model {
 	err := m.DB.QueryRow(
 		sql,
 	).Scan(count)
-	fmt.Println(sql)
 	m.Error = err
 	return m
 }
 func (m *Model) Find(dest interface{}) *Model {
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() == reflect.Ptr {
+		destVal = destVal.Elem() // 解引用 *slice => slice
+	}
+
 	sql := fmt.Sprintf("SELECT * FROM %s", m.BuildConditions(m.conditions))
 	rows, err := m.DB.Query(sql)
 	if err != nil {
@@ -150,8 +183,12 @@ func (m *Model) Find(dest interface{}) *Model {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		elemPtr := reflect.New(reflect.TypeOf(m.Obj)) // *T
-		elemVal := elemPtr.Elem()                     // T
+		typ := reflect.TypeOf(m.Obj)
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem() // 获取指针指向的真实类型
+		}
+		elemPtr := reflect.New(typ) // *T
+		elemVal := elemPtr.Elem()   // T
 		var scanArgs []interface{}
 
 		for _, field := range m.TableInfo.FieldsList {
@@ -172,7 +209,9 @@ func (m *Model) Find(dest interface{}) *Model {
 		if err != nil {
 			log.Fatal(err)
 		}
-		dest = append(dest.([]interface{}), elemVal.Interface())
+		destVal = reflect.Append(destVal, elemVal)
 	}
+	reflect.ValueOf(dest).Elem().Set(destVal)
+
 	return m
 }

@@ -6,9 +6,14 @@ https://go.dev/doc/tutorial/
 
 - @ques
 
+  - update
+  - save
+  - "123" -> "'123'" -> 什么鬼 ?
+  - 理解 reflect 的应用
+  - ***
+  - get list v2
   - get order
   - get item
-  - ***
   - get list
   - delete item
   - create table
