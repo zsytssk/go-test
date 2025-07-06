@@ -32,17 +32,6 @@ func main() {
 	}
 	db1 := dbt.NewModel(db, &DirItem{})
 
-	obj1 := DirItem{Dir: "123", Item: Item{ID: 1, Name: "123", Priority: 123}}
-	err = db1.Save(obj1).Error
-	if err != nil {
-		panic(err)
-	}
-	obj2 := DirItem{Dir: "123", Item: Item{ID: 2, Name: "123", Priority: 123}}
-	err = db1.Save(obj2).Error
-	if err != nil {
-		panic(err)
-	}
-
 	var count int64
 	err = db1.Count(&count).Error
 	if err != nil {
