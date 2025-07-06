@@ -22,7 +22,7 @@ type DirItem struct {
 }
 
 func (DirItem) TableName() string {
-	return "device_shutdown_operation"
+	return "dir"
 }
 
 func main() {

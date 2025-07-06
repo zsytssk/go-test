@@ -6,11 +6,12 @@ https://go.dev/doc/tutorial/
 
 - @ques
 
+  - 获取列数 ... -> 如何添加新的 column
+  - 理解 reflect 的应用
+  - ***
   - update
   - save
   - "123" -> "'123'" -> 什么鬼 ?
-  - 理解 reflect 的应用
-  - ***
   - get list v2
   - get order
   - get item
@@ -19,6 +20,12 @@ https://go.dev/doc/tutorial/
   - create table
   - insert item
   - update item
+
+```
+ALTER TABLE users ADD COLUMN age INT;
+```
+
+## 2025-07-06 13:42:12
 
 - @ques 如何组合 conditions
 
