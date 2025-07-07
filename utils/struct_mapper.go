@@ -59,8 +59,3 @@ func MapToStruct(obj map[string]interface{}, t reflect.Type) interface{} {
 
 	return v.Interface()
 }
-
-func IsZero(v interface{}) bool {
-	val := reflect.ValueOf(v)
-	return val.IsZero() // Go 1.13+
-}

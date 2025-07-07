@@ -6,9 +6,9 @@ https://go.dev/doc/tutorial/
 
 - @ques
 
-  - 获取列数 ... -> 如何添加新的 column
-  - 理解 reflect 的应用
+  - 获取列数 ... -> 如何同步 struct 和 table column 不一致
   - ***
+  - 理解 reflect 的应用
   - update
   - save
   - "123" -> "'123'" -> 什么鬼 ?
@@ -74,24 +74,18 @@ var file example.ExaFileUploadAndDownload
 
 ### reflect
 
-- @ques
-
-  - create table
-  - insert item
-  - update item
-  - delete item
-
 - reflect.Type
 
-  - `reflect.TypeOf(i)` `v.Type()`
+  - `reflect.TypeOf(i)` `v.Type()` `t.Field(i)`
   - `.NumField()`
-  - `t.Field(i)`
 
 - reflect.Value
   - `v = v.Elem()` `reflect.New(t).Elem()` `reflect.ValueOf(v)`
   - `v.Type()` -> reflect.Type
   - `v.NumField()` `v.Field(i)`
-  - `.CanInterface()` `fieldVal.Interface()`
   - `.IsValid()` `.CanSet()`
-  - `field.Set(reflect.ValueOf(value))`
+  - `.CanInterface()` `v.Interface()`
+  - `.CanAddr()` `.Addr().Interface()`
+  - `.Set(reflect.ValueOf(value))`
   - `v.FieldByName(key)`
+  - `v.IsNil()`

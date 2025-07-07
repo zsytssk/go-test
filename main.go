@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-test/dbt"
-	"reflect"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -61,32 +60,4 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(`test:>items`, string(jsonBytes1))
-	// data, err := json.Marshal(obj)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// var result map[string]interface{}
-	// err = json.Unmarshal(data, &result)
-	// for k, v := range result {
-	// 	t := reflect.TypeOf(v)
-	// 	fmt.Printf("key: %-5s → type: %-20s → value: %v\n", k, t.String(), v)
-
-	// }
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// item := Item{ID: 1, Name: "123", Priority: 0}
-	// m := StructToMap(item)
-	// for item, value := range m {
-	// 	fmt.Printf("%s: %v (%T)\n", item, value, value)
-	// }
-	// fmt.Println("----------------")
-	// i := MapToStruct(m, reflect.TypeOf(DirItem{})).(DirItem)
-	// fmt.Println(`test:>key`, i)
-	// testFn(reflect.TypeOf(i))
-}
-
-func IsZero(v interface{}) bool {
-	val := reflect.ValueOf(v)
-	return val.IsZero() // Go 1.13+
 }
