@@ -7,7 +7,6 @@ import (
 	"log"
 	"reflect"
 	"strings"
-	"time"
 )
 
 type TableInterface interface {
@@ -19,7 +18,6 @@ func InitDB(dbPath string) (db *sql.DB, err error) {
 	if err != nil {
 		return
 	}
-	fmt.Println(filePath)
 	db, err = sql.Open("sqlite3", filePath)
 	if err != nil {
 		return
@@ -29,50 +27,6 @@ func InitDB(dbPath string) (db *sql.DB, err error) {
 
 type TableStruct interface {
 	TableName() string
-}
-
-func GoTypeToSQLType(goType reflect.Type) string {
-	switch goType.Kind() {
-	case reflect.Int, reflect.Int32:
-		return "INT"
-	case reflect.Int64:
-		return "BIGINT"
-	case reflect.Uint, reflect.Uint64:
-		return "BIGINT UNSIGNED"
-	case reflect.Float32:
-		return "FLOAT"
-	case reflect.Float64:
-		return "DOUBLE"
-	case reflect.Bool:
-		return "TINYINT(1)"
-	case reflect.String:
-		return "VARCHAR(255)"
-	case reflect.Slice:
-		if goType.Elem().Kind() == reflect.Uint8 {
-			return "BLOB"
-		}
-	case reflect.Struct:
-		if goType.PkgPath() == "time" && goType.Name() == "Time" {
-			return "DATETIME"
-		}
-	}
-	return "TEXT"
-}
-
-func formatSQLValue(val interface{}) string {
-	switch v := val.(type) {
-	case string:
-		if v == "" {
-			return "" // 视为空值
-		}
-		return strings.ReplaceAll(v, "'", "''") // 防止 SQL 注入
-	case time.Time:
-		return v.Format("2006-01-02 15:04:05")
-	case nil:
-		return "NULL"
-	default:
-		return fmt.Sprintf("%v", v) // int, float, bool 等直接返回
-	}
 }
 
 func StructToSQLCreateTable(db *sql.DB, obj TableStruct) (err error) {
@@ -113,14 +67,14 @@ func StructToSQLInsert(db *sql.DB, obj TableStruct) (err error) {
 	for _, field := range fields_list {
 		columns = append(columns, field["name"].(string))
 		placeholders = append(placeholders, "?")
-		values = append(values, formatSQLValue(field["value"]))
+		values = append(values, field["value"])
 	}
 	sqlStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
 		strings.ToLower(obj.TableName()),
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
-
+	// fmt.Println(sqlStr)
 	_, err = db.Exec(sqlStr, values...)
 	if err != nil {
 		return
@@ -134,7 +88,7 @@ func StructToSQLUpdate(db *sql.DB, obj TableStruct, ignore_zero bool) (err error
 	for _, field := range fields_list {
 		db_type := field["dbType"].(string)
 		if db_type == "primaryKey" {
-			where_str = fmt.Sprintf("  %s = %v", field["name"], formatSQLValue(field["value"]))
+			where_str = fmt.Sprintf(" %s = %v", field["name"], formatSQLValue(field["value"]))
 			continue
 		}
 		if ignore_zero && utils.IsZero(field["value"]) {
@@ -144,9 +98,10 @@ func StructToSQLUpdate(db *sql.DB, obj TableStruct, ignore_zero bool) (err error
 	}
 	sqlStr := fmt.Sprintf("UPDATE %s\nSET %s \n WHERE %s;",
 		strings.ToLower(obj.TableName()),
-		strings.Join(columns, ", "),
+		strings.Join(columns, ",\n"),
 		where_str,
 	)
+	fmt.Println(sqlStr)
 	_, err = db.Exec(sqlStr)
 	if err != nil {
 		return
@@ -251,6 +206,15 @@ func StructToSQLDeleteTable(db *sql.DB, obj TableStruct) (err error) {
 	}
 	return
 }
+
+type FieldItem struct {
+	DbType  string
+	Name    string
+	OriName string
+	SqlType string
+	Value   interface{}
+}
+
 func collectFields(obj interface{}) (connects []map[string]interface{}) {
 	v := reflect.ValueOf(obj)
 	if v.Kind() == reflect.Ptr {
@@ -286,6 +250,7 @@ func collectFields(obj interface{}) (connects []map[string]interface{}) {
 			"dbType":  dbType,
 			"name":    name,
 			"oriName": fieldType.Name,
+			"oriType": fieldType.Type,
 			"sqlType": sqlType,
 			"value":   value,
 		})
@@ -295,9 +260,88 @@ func collectFields(obj interface{}) (connects []map[string]interface{}) {
 	return
 }
 
+type TableColumn struct {
+	Cid       int
+	Name      string
+	Ctype     string
+	Notnull   int
+	DfltValue sql.NullString
+	Pk        int
+}
+
+func getTableColumns(db *sql.DB, obj TableStruct) (columns []TableColumn, err error) {
+	sqlStr := fmt.Sprintf("PRAGMA table_info(%s);", strings.ToLower(obj.TableName()))
+	rows, err := db.Query(sqlStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var column TableColumn
+
+		err = rows.Scan(
+			&column.Cid,
+			&column.Name,
+			&column.Ctype,
+			&column.Notnull,
+			&column.DfltValue,
+			&column.Pk,
+		)
+		if err != nil {
+			return
+		}
+		columns = append(columns, column)
+	}
+	return
+}
+
 func CheckTableExist(db *sql.DB, tableName string) (exist bool) {
 	var exists bool
 	query := "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)"
 	err := db.QueryRow(query, tableName).Scan(&exists)
 	return err == nil && exists
+}
+
+func SyncTableColumns(db *sql.DB, obj TableStruct) (err error) {
+	columns, err := getTableColumns(db, obj)
+	fields_list := collectFields(obj)
+
+	for _, column := range columns {
+		if utils.ArrFindIndex(fields_list, func(field map[string]interface{}, index int) bool {
+			if field["name"] == column.Name {
+				fmt.Println("column:", column.Name, column.Ctype, field["oriType"])
+			}
+			return field["name"] == column.Name &&
+				IsSQLTypeCompatible(column.Ctype, field["oriType"].(reflect.Type))
+		}) != -1 {
+			continue
+		}
+		_, err = db.Exec(fmt.Sprintf(
+			"ALTER TABLE %s DROP COLUMN %s;",
+			obj.TableName(),
+			column.Name,
+		))
+		if err != nil {
+			return
+		}
+	}
+	for _, field := range fields_list {
+		if utils.ArrFindIndex(columns, func(column TableColumn, index int) bool {
+			return column.Name == field["name"] &&
+				IsSQLTypeCompatible(column.Ctype, field["oriType"].(reflect.Type))
+		}) != -1 {
+			continue
+		}
+		fmt.Println("deleteColumns:>2", field["name"], field["sqlType"])
+
+		_, err = db.Exec(fmt.Sprintf(
+			"ALTER TABLE %s ADD COLUMN %s %s NOT NULL DEFAULT %s;",
+			obj.TableName(),
+			field["name"],
+			field["sqlType"],
+			formatSQLDefaultValue(field["oriType"].(reflect.Type)),
+		))
+	}
+
+	return
 }

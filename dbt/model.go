@@ -27,12 +27,19 @@ type Model struct {
 
 func NewModel(db *sql.DB, obj TableStruct) *Model {
 	fields_list := collectFields(obj)
-
-	return &Model{
+	m := &Model{
 		DB:        db,
 		Obj:       obj,
 		TableInfo: TableInfo{FieldsList: fields_list, TableName: obj.TableName()},
 	}
+	if !CheckTableExist(m.DB, m.Obj.TableName()) {
+		err := StructToSQLCreateTable(m.DB, m.Obj)
+		if err != nil {
+			m.Error = err
+			return m
+		}
+	}
+	return m
 }
 
 func (m *Model) BuildConditions(conditions []Condition) string {
@@ -81,17 +88,17 @@ func (m *Model) Where(query string) *Model {
 	return m
 }
 
-func (m *Model) Limit(limit *int64) *Model {
+func (m *Model) Limit(limit int64) *Model {
 	m.conditions = append(m.conditions, Condition{
 		ConditionType: "limit",
-		Query:         fmt.Sprintf(" LIMIT %d", *limit),
+		Query:         fmt.Sprintf(" LIMIT %d", limit),
 	})
 	return m
 }
-func (m *Model) Offset(offset *int64) *Model {
+func (m *Model) Offset(offset int64) *Model {
 	m.conditions = append(m.conditions, Condition{
 		ConditionType: "offset",
-		Query:         fmt.Sprintf(" OFFSET %d", *offset),
+		Query:         fmt.Sprintf(" OFFSET %d", offset),
 	})
 	return m
 }
@@ -104,13 +111,6 @@ func (m *Model) Order(order string) *Model {
 }
 
 func (m *Model) Save(value interface{}) *Model {
-	if !CheckTableExist(m.DB, m.Obj.TableName()) {
-		err := StructToSQLCreateTable(m.DB, m.Obj)
-		if err != nil {
-			m.Error = err
-			return m
-		}
-	}
 	exists, err := CheckItemExist(m.DB, value.(TableStruct))
 	if err != nil {
 		m.Error = err
@@ -132,7 +132,18 @@ func (m *Model) Update(value interface{}) *Model {
 	return m
 }
 
+func (m *Model) Delete(value interface{}) *Model {
+	err := StructToSQLDelete(m.DB, value.(TableStruct))
+	m.Error = err
+	return m
+}
+
 func (m *Model) First(first interface{}) *Model {
+	err := SyncTableColumns(m.DB, m.Obj)
+	if err != nil {
+		m.Error = err
+		return m
+	}
 	conditions := append([]Condition{{
 		ConditionType: "order",
 		Query:         "LIMIT 1",
@@ -157,7 +168,7 @@ func (m *Model) First(first interface{}) *Model {
 		// 添加字段地址作为 Scan 参数
 		scanArgs = append(scanArgs, structField.Addr().Interface())
 	}
-	err := m.DB.QueryRow(sql).Scan(scanArgs...)
+	err = m.DB.QueryRow(sql).Scan(scanArgs...)
 	m.Error = err
 	return m
 }
@@ -170,12 +181,18 @@ func (m *Model) Count(count *int64) *Model {
 	return m
 }
 func (m *Model) Find(dest interface{}) *Model {
+	err := SyncTableColumns(m.DB, m.Obj)
+	if err != nil {
+		m.Error = err
+		return m
+	}
 	destVal := reflect.ValueOf(dest)
 	if destVal.Kind() == reflect.Ptr {
 		destVal = destVal.Elem() // 解引用 *slice => slice
 	}
 
 	sql := fmt.Sprintf("SELECT * FROM %s", m.BuildConditions(m.conditions))
+	fmt.Println(sql)
 	rows, err := m.DB.Query(sql)
 	if err != nil {
 		m.Error = err

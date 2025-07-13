@@ -1,5 +1,19 @@
 https://go.dev/doc/tutorial/
 
+## 2025-07-13 11:02:53
+
+quick-cmd 隐藏命令 -> 同步 table
+
+collectFields -> struct
+
+go 如何获取某个类型的默认值
+
+db 怎么设置 NOT NULL
+
+IsSQLTypeCompatible
+
+- test Where Limit Offset Order
+
 ## 2025-07-05 10:32:32
 
 - @ques 如何使用 interface

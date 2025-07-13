@@ -16,8 +16,7 @@ type Item struct {
 
 type DirItem struct {
 	Item
-	Dir      string `json:"dir"`
-	TestName string
+	Hide bool `json:"hidden"`
 }
 
 func (DirItem) TableName() string {
@@ -37,6 +36,9 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(`test:>count`, count)
+	if count == 0 {
+		return
+	}
 	var item DirItem
 	err = db1.First(&item).Error
 	if err != nil {
@@ -47,9 +49,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(`test:>items`, string(jsonBytes))
+	fmt.Println(`test:>item`, string(jsonBytes))
+	item.ID = 33
+	item.Priority = 20
+	item.Hide = true
+	err = db1.Delete(&item).Error
+	if err != nil {
+		panic(err)
+	}
 	var list []DirItem
-	err = db1.Find(&list).Error
+	err = db1.Order("ORDER BY priority DESC").Limit(2).Offset(0).Find(&list).Error
 	if err != nil {
 		panic(err)
 	}
