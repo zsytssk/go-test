@@ -192,7 +192,7 @@ func (m *Model) Find(dest interface{}) *Model {
 	}
 
 	sql := fmt.Sprintf("SELECT * FROM %s", m.BuildConditions(m.conditions))
-	fmt.Println(sql)
+	// fmt.Println(sql)
 	rows, err := m.DB.Query(sql)
 	if err != nil {
 		m.Error = err

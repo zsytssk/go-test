@@ -24,7 +24,7 @@ func (DirItem) TableName() string {
 }
 
 func main() {
-	db, err := dbt.InitDB("./test.db")
+	db, err := dbt.Init("./test.db")
 	if err != nil {
 		panic(err)
 	}

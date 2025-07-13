@@ -13,7 +13,7 @@ type TableInterface interface {
 	TableName() string
 }
 
-func InitDB(dbPath string) (db *sql.DB, err error) {
+func Init(dbPath string) (db *sql.DB, err error) {
 	filePath, err := utils.GetCurDirFilePath(dbPath)
 	if err != nil {
 		return
@@ -48,7 +48,7 @@ func StructToSQLCreateTable(db *sql.DB, obj TableStruct) (err error) {
 		strings.ToLower(obj.TableName()),
 		strings.Join(columns, ",\n"),
 	)
-	fmt.Println(sqlStr)
+	// fmt.Println(sqlStr)
 	_, err = db.Exec(sqlStr)
 	if err != nil {
 		return
@@ -65,6 +65,10 @@ func StructToSQLInsert(db *sql.DB, obj TableStruct) (err error) {
 	var placeholders []string
 	var values []interface{}
 	for _, field := range fields_list {
+		db_type := field["dbType"].(string)
+		if db_type == "primaryKey" {
+			continue
+		}
 		columns = append(columns, field["name"].(string))
 		placeholders = append(placeholders, "?")
 		values = append(values, field["value"])
@@ -74,7 +78,6 @@ func StructToSQLInsert(db *sql.DB, obj TableStruct) (err error) {
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "),
 	)
-	// fmt.Println(sqlStr)
 	_, err = db.Exec(sqlStr, values...)
 	if err != nil {
 		return
@@ -101,7 +104,7 @@ func StructToSQLUpdate(db *sql.DB, obj TableStruct, ignore_zero bool) (err error
 		strings.Join(columns, ",\n"),
 		where_str,
 	)
-	fmt.Println(sqlStr)
+	// fmt.Println(sqlStr)
 	_, err = db.Exec(sqlStr)
 	if err != nil {
 		return
@@ -308,14 +311,12 @@ func SyncTableColumns(db *sql.DB, obj TableStruct) (err error) {
 
 	for _, column := range columns {
 		if utils.ArrFindIndex(fields_list, func(field map[string]interface{}, index int) bool {
-			if field["name"] == column.Name {
-				fmt.Println("column:", column.Name, column.Ctype, field["oriType"])
-			}
 			return field["name"] == column.Name &&
 				IsSQLTypeCompatible(column.Ctype, field["oriType"].(reflect.Type))
 		}) != -1 {
 			continue
 		}
+		// fmt.Println("deleteColumns:>2", column.Name, column.Ctype)
 		_, err = db.Exec(fmt.Sprintf(
 			"ALTER TABLE %s DROP COLUMN %s;",
 			obj.TableName(),
@@ -332,7 +333,7 @@ func SyncTableColumns(db *sql.DB, obj TableStruct) (err error) {
 		}) != -1 {
 			continue
 		}
-		fmt.Println("deleteColumns:>2", field["name"], field["sqlType"])
+		// fmt.Println("deleteColumns:>2", field["name"], field["sqlType"])
 
 		_, err = db.Exec(fmt.Sprintf(
 			"ALTER TABLE %s ADD COLUMN %s %s NOT NULL DEFAULT %s;",
