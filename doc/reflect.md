@@ -13,12 +13,12 @@ go reflect 是一种运行时处理类型的方式, 在一些处理多种类型�
 - reflect.Value
   - `v = v.Elem()` `reflect.New(t).Elem()` `reflect.ValueOf(v)`
   - `v.Type()` -> reflect.Type
-  - `v.NumField()` `v.Field(i)`
-  - `.IsValid()` `.CanSet()`
+  - struct `v.NumField()` `v.Field(i)` `v.FieldByName(i)`
+  - slice `v.Len()` `v.Index(i)` `reflect.Append(v, ...)`
+  - `.IsValid()`
   - `.CanInterface()` `v.Interface()`
   - `.CanAddr()` `.Addr().Interface()`
-  - `.Set(reflect.ValueOf(value))`
-  - `v.FieldByName(key)`
+  - `.CanSet()` `.Set(reflect.ValueOf(value))`
   - `v.IsNil()`
 
 ```go

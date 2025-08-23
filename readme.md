@@ -1,5 +1,23 @@
 https://go.dev/doc/tutorial/
 
+## 2025-08-23 11:17:47
+
+如何正确的学习一门知识 -> 熟练？
+
+## 2025-07-15 09:08:32
+
+重点 -> reflect + sql
+
+- collectFields 重复调用 -> 许多地方
+
+```
+reflect.Field
+reflect.Slice vs reflect.Array
+fieldType.IsExported() || !fieldVal.CanInterface -> 有什么区别
+```
+
+- @ques 怎么向 arr 中 push 数组
+
 ## 2025-07-13 11:02:53
 
 quick-cmd 隐藏命令 -> 同步 table
